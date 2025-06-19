@@ -5,12 +5,13 @@ import {
   getTodos,
   USER_ID,
   deleteTodo,
-  //updateTodo,
+  updateTodo,
 } from './api/todos';
-import { UserTodosList } from './UserTodosList';
 import { Todo } from './types/Todo';
 import { ErrorMessage } from './ErrorMessage';
 import { Footer } from './Footer';
+import { TodoList } from './TodoList';
+import classNames from 'classnames';
 
 export type TodoInput = Omit<Todo, 'id'>;
 
@@ -19,16 +20,12 @@ export const App: React.FC = () => {
   const [title, setTitle] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [filter, setFilter] = useState<string>('all');
-  const [isCreating, setIsCreating] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [tempTodo, setTempTodo] = useState<Todo>({
-    id: 0,
-    userId: USER_ID,
-    title: '',
-    completed: false,
-  });
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [loadingIds, setLoadingIds] = useState<number[]>([]);
+  const [tempTodo, setTempTodo] = useState<Todo | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const allCompleted = todos?.length && todos.every(todo => todo.completed);
 
   const clearError = () => {
     setError('');
@@ -69,27 +66,34 @@ export const App: React.FC = () => {
       return;
     }
 
-    setIsCreating(true);
+    setIsLoading(true);
 
-    if (tempTodo !== null) {
-      addTodos({ ...tempTodo, title: title.trim() })
-        .then(newTodoFromAPI => {
-          setTodos(prev =>
-            prev ? [...prev, newTodoFromAPI] : [newTodoFromAPI],
-          );
-          setTempTodo({ id: 0, userId: USER_ID, title: '', completed: false });
-          setTimeout(() => inputRef.current?.focus(), 0);
-          setTitle('');
-        })
-        .catch(() => {
-          setError('add');
-          setTempTodo({ id: 0, userId: USER_ID, title: '', completed: false });
-          setTimeout(() => inputRef.current?.focus(), 0);
-        })
-        .finally(() => {
-          setIsCreating(false);
-        });
-    }
+    setTempTodo({
+      id: 0,
+      title: title.trim(),
+      completed: false,
+      userId: USER_ID,
+    });
+
+    addTodos({
+      id: 0,
+      title: title.trim(),
+      completed: false,
+      userId: USER_ID,
+    })
+      .then(newTodoFromAPI => {
+        setTodos(prev => (prev ? [...prev, newTodoFromAPI] : [newTodoFromAPI]));
+        setTimeout(() => inputRef.current?.focus(), 0);
+        setTitle('');
+      })
+      .catch(() => {
+        setError('add');
+        setTimeout(() => inputRef.current?.focus(), 0);
+      })
+      .finally(() => {
+        setTempTodo(null);
+        setIsLoading(false);
+      });
   };
 
   const handleFilter = (): Todo[] | null => {
@@ -109,7 +113,8 @@ export const App: React.FC = () => {
   };
 
   const delTodo = (todoId: number) => {
-    setIsDeleting(true);
+    setIsLoading(true);
+    setLoadingIds(prev => [...prev, todoId]);
     deleteTodo(todoId)
       .then(() => {
         if (todos) {
@@ -117,51 +122,93 @@ export const App: React.FC = () => {
 
           setTodos(updatedTodos);
         }
+
+        setLoadingIds(prev => prev.filter(id => id !== todoId));
       })
-      .catch(() => setError('delete'))
+      .catch(() => {
+        setError('delete');
+        setLoadingIds(prev => prev.filter(id => id !== todoId));
+      })
       .finally(() => {
-        setIsDeleting(false);
+        setIsLoading(false);
       });
   };
 
   const deleteCompletedTodos = () => {
+    setIsLoading(true);
+
     if (!todos) {
       return;
     }
 
     const completedTodos = todos.filter(todo => todo.completed === true);
+    const completedTodosIds = completedTodos.map(todo => todo.id);
 
-    Promise.allSettled(completedTodos.map(todo => deleteTodo(todo.id))).then(
-      results => {
-        const failedIds = completedTodos
-          .filter((_, index) => results[index].status === 'rejected')
-          .map(todo => todo.id);
+    setLoadingIds(prev => [...prev, ...completedTodosIds]);
 
-        if (failedIds.length > 0) {
+    Promise.allSettled(
+      completedTodosIds.map(todoIdCompleted =>
+        deleteTodo(todoIdCompleted).then(() => {
+          setTodos(
+            currentTodos =>
+              currentTodos &&
+              currentTodos.filter(
+                currentTodo => currentTodo.id !== todoIdCompleted,
+              ),
+          );
+          setLoadingIds(prev => prev.filter(id => id !== todoIdCompleted));
+        }),
+      ),
+    )
+      .then(results => {
+        const hasError = results.some(r => r.status === 'rejected');
+
+        if (hasError) {
           setError('delete');
         }
-
-        const updatedTodos = todos.filter(
-          todo => !todo.completed || failedIds.includes(todo.id),
-        );
-
-        setTodos(updatedTodos);
-      },
-    );
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   };
-  /*
 
   const checkTodo = (todoId: number) => {
+    setIsLoading(true);
+    setLoadingIds(prev => [...prev, todoId]);
+
     const todoToUpdate = todos?.find(todo => todo.id === todoId);
 
     if (!todoToUpdate) {
+      setIsLoading(false);
+      setLoadingIds(prev => prev.filter(id => id !== todoId));
+
       return;
     }
 
     const newCompletedStatus = !todoToUpdate.completed;
 
-    updateTodo(todoId, { completed: newCompletedStatus });
-    setShouldFetch(true);
+    updateTodo(todoId, { completed: newCompletedStatus })
+      .then(() => {
+        setTodos(prev => {
+          if (!prev) {
+            return null;
+          }
+
+          return prev.map(todo =>
+            todo.id === todoId
+              ? { ...todo, completed: newCompletedStatus }
+              : todo,
+          );
+        });
+        setLoadingIds(prev => prev.filter(id => id !== todoId));
+      })
+      .catch(() => {
+        setError('update');
+        setLoadingIds(prev => prev.filter(id => id !== todoId));
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   };
 
   const checkAllTodos = () => {
@@ -169,21 +216,44 @@ export const App: React.FC = () => {
       return;
     }
 
-    const allCompleted = todos.every(todo => todo.completed);
-    const newCompletedStatus = !allCompleted;
+    const allCompletedTodos = todos.every(todo => todo.completed);
+    const newCompletedStatus = !allCompletedTodos;
+
+    setIsLoading(true);
 
     Promise.all(
-      todos.map(todo =>
-        updateTodo(todo.id, { completed: newCompletedStatus }).catch(() =>
-          setError('update'),
-        ),
-      ),
-    );
+      todos
+        .filter(todo => todo.completed === !newCompletedStatus)
+        .map(todo => {
+          setLoadingIds(prev => [...prev, todo.id]);
+          updateTodo(todo.id, { completed: newCompletedStatus });
+        }),
+    )
+      .then(() => {
+        setTodos(prev => {
+          if (!prev) {
+            return null;
+          }
 
-    setShouldFetch(true);
+          return prev.map(todo => ({
+            ...todo,
+            completed: newCompletedStatus,
+          }));
+        });
+        todos.map(todo => {
+          setLoadingIds(prev => prev.filter(id => id !== todo.id));
+        });
+      })
+      .catch(() => {
+        setError('update');
+        todos.map(todo => {
+          setLoadingIds(prev => prev.filter(id => id !== todo.id));
+        });
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   };
-
-  */
 
   const finalTodos: Todo[] | null = handleFilter();
 
@@ -193,12 +263,16 @@ export const App: React.FC = () => {
 
       <div className="todoapp__content">
         <header className="todoapp__header">
-          <button
-            type="button"
-            className="todoapp__toggle-all active"
-            data-cy="ToggleAllButton"
-            //onClick={() => checkAllTodos()}
-          />
+          {todos && todos.length > 0 && (
+            <button
+              type="button"
+              className={classNames('todoapp__toggle-all', {
+                active: allCompleted,
+              })}
+              data-cy="ToggleAllButton"
+              onClick={() => checkAllTodos()}
+            />
+          )}
 
           <form onSubmit={handleSubmit}>
             <input
@@ -211,26 +285,20 @@ export const App: React.FC = () => {
               onChange={e => {
                 setTitle(e.target.value);
               }}
-              disabled={isCreating}
+              disabled={isLoading}
             />
           </form>
         </header>
 
         <section className="todoapp__main" data-cy="TodoList">
-          <UserTodosList
+          <TodoList
             todos={finalTodos}
-            //onChecked={checkTodo}
+            tempTodo={tempTodo}
+            loadingIds={loadingIds}
             onDeleted={delTodo}
-            isDeleting={isDeleting}
+            isLoading={isLoading}
+            onChecked={checkTodo}
           />
-          {isCreating && (
-            <UserTodosList
-              todos={[{ ...tempTodo, title: title }]}
-              //onChecked={checkTodo}
-              onDeleted={delTodo}
-              isLoading={isCreating}
-            />
-          )}
         </section>
 
         {todos && todos.length > 0 && (
