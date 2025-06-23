@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Todo } from './types/Todo';
 import { TodoItem } from './TodoItem';
 
@@ -8,6 +8,7 @@ type Props = {
   loadingIds: number[];
   onChecked: (todoId: number) => void;
   onDeleted: (todoId: number) => void;
+  onUpdated: (todoId: number, newTitle: string) => void;
   isLoading: boolean;
 };
 
@@ -18,7 +19,10 @@ export const TodoList = ({
   onDeleted,
   isLoading,
   onChecked,
+  onUpdated,
 }: Props) => {
+  const [editingTodoId, setEditingTodoId] = useState<number | null>(null);
+
   if (!todos) {
     return null;
   }
@@ -32,6 +36,9 @@ export const TodoList = ({
           loading={loadingIds.includes(todo.id)}
           onDeleted={onDeleted}
           onChecked={onChecked}
+          onUpdated={onUpdated}
+          editingTodoId={editingTodoId}
+          setEditingTodoId={setEditingTodoId}
         />
       ))}
       {isLoading && (
@@ -41,6 +48,9 @@ export const TodoList = ({
           loading={true}
           onDeleted={onDeleted}
           onChecked={onChecked}
+          onUpdated={onUpdated}
+          editingTodoId={editingTodoId}
+          setEditingTodoId={setEditingTodoId}
         />
       )}
     </>

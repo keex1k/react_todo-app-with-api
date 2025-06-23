@@ -255,6 +255,41 @@ export const App: React.FC = () => {
       });
   };
 
+  const changeTitle = (todoId: number, newTitle: string) => {
+    setIsLoading(true);
+    setLoadingIds(prev => [...prev, todoId]);
+
+    const todoToUpdate = todos?.find(todo => todo.id === todoId);
+
+    if (!todoToUpdate) {
+      setIsLoading(false);
+      setLoadingIds(prev => prev.filter(id => id !== todoId));
+
+      return;
+    }
+
+    updateTodo(todoId, { title: newTitle })
+      .then(() => {
+        setTodos(prev => {
+          if (!prev) {
+            return null;
+          }
+
+          return prev.map(todo =>
+            todo.id === todoId ? { ...todo, title: newTitle } : todo,
+          );
+        });
+        setLoadingIds(prev => prev.filter(id => id !== todoId));
+      })
+      .catch(() => {
+        setError('update');
+        setLoadingIds(prev => prev.filter(id => id !== todoId));
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  };
+
   const finalTodos: Todo[] | null = handleFilter();
 
   return (
@@ -298,6 +333,7 @@ export const App: React.FC = () => {
             onDeleted={delTodo}
             isLoading={isLoading}
             onChecked={checkTodo}
+            onUpdated={changeTitle}
           />
         </section>
 
