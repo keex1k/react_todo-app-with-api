@@ -51,6 +51,7 @@ export const TodoItem = ({
 
     if (trimmedTitle === todo.title) {
       cancelEditing();
+
       return;
     }
 
@@ -58,6 +59,7 @@ export const TodoItem = ({
       setIsDeleting(true);
       try {
         const success = await onDeleted(todo.id);
+
         if (success) {
           setEditingTodoId(null);
         }
@@ -71,6 +73,7 @@ export const TodoItem = ({
     setIsSaving(true);
     try {
       const success = await onUpdated(todo.id, trimmedTitle);
+
       if (success) {
         setEditingTodoId(null);
       }

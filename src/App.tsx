@@ -261,7 +261,10 @@ export const App: React.FC = () => {
       });
   };
 
-  const changeTitle = async (todoId: number, newTitle: string): Promise<boolean> => {
+  const changeTitle = async (
+    todoId: number,
+    newTitle: string,
+  ): Promise<boolean> => {
     setIsLoading(true);
     setLoadingIds(prev => [...prev, todoId]);
 
@@ -270,6 +273,7 @@ export const App: React.FC = () => {
     if (!todoToUpdate) {
       setIsLoading(false);
       setLoadingIds(prev => prev.filter(id => id !== todoId));
+
       return false;
     }
 
@@ -277,7 +281,10 @@ export const App: React.FC = () => {
       await updateTodo(todoId, { title: newTitle });
 
       setTodos(prev => {
-        if (!prev) return null;
+        if (!prev) {
+          return null;
+        }
+
         return prev.map(todo =>
           todo.id === todoId ? { ...todo, title: newTitle } : todo,
         );
@@ -286,15 +293,13 @@ export const App: React.FC = () => {
       return true;
     } catch {
       setError('update');
+
       return false;
     } finally {
       setLoadingIds(prev => prev.filter(id => id !== todoId));
       setIsLoading(false);
     }
   };
-
-
-
 
   const finalTodos: Todo[] | null = handleFilter();
 
