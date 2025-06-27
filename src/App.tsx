@@ -25,6 +25,7 @@ export const App: React.FC = () => {
   const [tempTodo, setTempTodo] = useState<Todo | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const justAddedRef = useRef(true);
   const allCompleted = todos?.length && todos.every(todo => todo.completed);
 
   const clearError = () => {
@@ -40,7 +41,10 @@ export const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    inputRef.current?.focus();
+    if (justAddedRef.current) {
+      inputRef.current?.focus();
+      justAddedRef.current = false; // zresetuj flagę
+    }
   }, [todos]);
 
   useEffect(() => {
@@ -83,8 +87,8 @@ export const App: React.FC = () => {
     })
       .then(newTodoFromAPI => {
         setTodos(prev => (prev ? [...prev, newTodoFromAPI] : [newTodoFromAPI]));
-        setTimeout(() => inputRef.current?.focus(), 0);
         setTitle('');
+        justAddedRef.current = true;
       })
       .catch(() => {
         setError('add');
@@ -121,6 +125,7 @@ export const App: React.FC = () => {
           const updatedTodos = todos.filter(todo => todo.id !== todoId);
 
           setTodos(updatedTodos);
+          justAddedRef.current = true;
         }
 
         setLoadingIds(prev => prev.filter(id => id !== todoId));
@@ -157,6 +162,7 @@ export const App: React.FC = () => {
               ),
           );
           setLoadingIds(prev => prev.filter(id => id !== todoIdCompleted));
+          justAddedRef.current = true;
         }),
       ),
     )
@@ -255,7 +261,7 @@ export const App: React.FC = () => {
       });
   };
 
-  const changeTitle = (todoId: number, newTitle: string) => {
+  const changeTitle = async (todoId: number, newTitle: string): Promise<boolean> => {
     setIsLoading(true);
     setLoadingIds(prev => [...prev, todoId]);
 
@@ -264,31 +270,31 @@ export const App: React.FC = () => {
     if (!todoToUpdate) {
       setIsLoading(false);
       setLoadingIds(prev => prev.filter(id => id !== todoId));
-
-      return;
+      return false;
     }
 
-    updateTodo(todoId, { title: newTitle })
-      .then(() => {
-        setTodos(prev => {
-          if (!prev) {
-            return null;
-          }
+    try {
+      await updateTodo(todoId, { title: newTitle });
 
-          return prev.map(todo =>
-            todo.id === todoId ? { ...todo, title: newTitle } : todo,
-          );
-        });
-        setLoadingIds(prev => prev.filter(id => id !== todoId));
-      })
-      .catch(() => {
-        setError('update');
-        setLoadingIds(prev => prev.filter(id => id !== todoId));
-      })
-      .finally(() => {
-        setIsLoading(false);
+      setTodos(prev => {
+        if (!prev) return null;
+        return prev.map(todo =>
+          todo.id === todoId ? { ...todo, title: newTitle } : todo,
+        );
       });
+
+      return true;
+    } catch {
+      setError('update');
+      return false;
+    } finally {
+      setLoadingIds(prev => prev.filter(id => id !== todoId));
+      setIsLoading(false);
+    }
   };
+
+
+
 
   const finalTodos: Todo[] | null = handleFilter();
 

@@ -28,11 +28,11 @@ export const TodoItem = ({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (editingTodoId === todo?.id) {
+    if (editingTodoId === todo?.id && !isSaving) {
       setNewTodoTitle(todo.title);
       setTimeout(() => inputRef.current?.focus(), 0);
     }
-  }, [editingTodoId, todo]);
+  }, [editingTodoId, todo?.id]);
 
   if (!todo) {
     return null;
@@ -50,34 +50,30 @@ export const TodoItem = ({
     const trimmedTitle = newTodoTitle.trim();
 
     if (trimmedTitle === todo.title) {
-      // Nie zmieniono tytułu - anuluj edycję
-      setNewTodoTitle(todo.title);
-
+      cancelEditing();
       return;
     }
 
     if (trimmedTitle.length === 0) {
-      // Usuń todo jeśli pusty tytuł
       setIsDeleting(true);
       try {
-        await onDeleted(todo.id);
-      } catch {
+        const success = await onDeleted(todo.id);
+        if (success) {
+          setEditingTodoId(null);
+        }
+      } finally {
         setIsDeleting(false);
-
-        return;
       }
-
-      setEditingTodoId(null);
 
       return;
     }
 
-    // Aktualizuj tytuł
     setIsSaving(true);
     try {
-      await onUpdated(todo.id, trimmedTitle);
-      setEditingTodoId(null);
-    } catch {
+      const success = await onUpdated(todo.id, trimmedTitle);
+      if (success) {
+        setEditingTodoId(null);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -173,6 +169,7 @@ export const TodoItem = ({
             onChange={e => setNewTodoTitle(e.target.value)}
             disabled={isLoading}
             autoComplete="off"
+            autoFocus
           />
         </form>
       )}
